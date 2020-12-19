@@ -109,3 +109,7 @@ make deploy-functions
 
 ## TODO
 - [ ] sync tag add/delete
+- [ ] CloudRun/CloudFunctionsに付与したサービスアカウントの認証情報でGCSRへのpushを実現する
+    * 個人に紐付いたssh鍵を使っていると保守性に難あり
+    * `git config credential.'https://source.developers.google.com'.helper gcloud.sh` をDockerfile内で実行できるか?
+    * https://cloud.google.com/source-repositories/docs/authentication

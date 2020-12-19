@@ -46,6 +46,7 @@ func init() {
 	projectName = cred.ProjectID
 	sugar.Debugf("GCP_PROJECT : %s", projectName)
 
+
 	if gcsrSshUser == "" {
 		sugar.Fatalf("not set env GCSR_SSH_KEY_USER")
 	}
