@@ -7,12 +7,12 @@ terraform {
 }
 
 provider "google" {
-  version = "3.50.0"
+  version = "3.51.0"
   region  = var.gcp_location
 }
 
 provider "google-beta" {
-  version = "3.50.0"
+  version = "3.51.0"
   region  = var.gcp_location
 }
 
@@ -233,41 +233,45 @@ resource "google_compute_region_network_endpoint_group" "repeater4gcsr_neg" {
   }
 }
 
-// create backend service
-resource "google_compute_backend_service" "repeater4gcsr_backend" {
-  provider = google-beta
-  project  = data.google_project.project.name
-  name     = "repeater4gcsr-backend"
+// https://registry.terraform.io/modules/GoogleCloudPlatform/lb-http/google/latest/submodules/serverless_negs
+module "repeater4gcsr-lb" {
+  source            = "GoogleCloudPlatform/lb-http/google//modules/serverless_negs"
+  version           = "~> 4.4"
 
-  protocol    = "HTTPS"
-  timeout_sec = 30
+  project           = data.google_project.project.name
+  name              = "repeater4gcsr-lb"
 
-  backend {
-    group = google_compute_region_network_endpoint_group.repeater4gcsr_neg.id
+  ssl                             = false
+//  managed_ssl_certificate_domains = ["your-domain.com"]
+  https_redirect                  = false
+
+  create_address = false
+  address = google_compute_global_address.repeater4gcsr_ingress_address.address
+
+  backends = {
+    default = {
+      description                     = null
+      enable_cdn                      = false
+      custom_request_headers          = null
+      security_policy                 = google_compute_security_policy.allow_bitbucket_cloud_public_ips.name
+
+
+      log_config = {
+        enable = true
+        sample_rate = 1.0
+      }
+
+      groups = [
+        {
+          group = google_compute_region_network_endpoint_group.repeater4gcsr_neg.id
+        }
+      ]
+
+      iap_config = {
+        enable               = false
+        oauth2_client_id     = null
+        oauth2_client_secret = null
+      }
+    }
   }
-
-  security_policy = google_compute_security_policy.allow_bitbucket_cloud_public_ips.name
-}
-
-// url-map
-resource "google_compute_url_map" "repeater4gcsr_urlmap" {
-  project         = data.google_project.project.name
-  name            = "repeater4gcsr-urlmap"
-  default_service = google_compute_backend_service.repeater4gcsr_backend.name
-}
-
-// create frontend service
-resource "google_compute_target_http_proxy" "repeater4gcsr_http" {
-  project = data.google_project.project.name
-  name    = "repeater4gcsr-http-proxy"
-  url_map = google_compute_url_map.repeater4gcsr_urlmap.id
-}
-
-resource "google_compute_global_forwarding_rule" "repeater4gcsr_redirect" {
-  project = data.google_project.project.name
-  name    = "repeater4gcsr-lb-http"
-
-  target     = google_compute_target_http_proxy.repeater4gcsr_http.id
-  port_range = "80"
-  ip_address = google_compute_global_address.repeater4gcsr_ingress_address.address
 }

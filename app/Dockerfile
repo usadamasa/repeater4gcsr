@@ -14,4 +14,7 @@ FROM gcr.io/distroless/base
 WORKDIR /app
 COPY --from=build-env /app/main /app/main
 
+RUN curl https://sdk.cloud.google.com | bash
+RUN git config credential.'https://source.developers.google.com'.helper gcloud.sh
+
 ENTRYPOINT ["./main"]
