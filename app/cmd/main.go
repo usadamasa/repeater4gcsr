@@ -12,7 +12,8 @@ import (
 func main() {
 	log.Print("Hello world sample started.")
 
-	http.HandleFunc("/", repeater4gcsr.Webhook)
+	http.HandleFunc("/", repeater4gcsr.Index)
+	http.HandleFunc("/webhook", repeater4gcsr.Webhook)
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

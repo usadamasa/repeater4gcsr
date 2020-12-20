@@ -1,0 +1,11 @@
+version: "3.7"
+services:
+  app:
+    build: .
+    volumes:
+      - ~/.config/gcloud:/root/.config/gcloud
+    environment:
+      - GCP_PROJECT
+      - GCSR_SSH_KEY_USER
+    ports:
+      - "127.0.0.1:8080:8080"

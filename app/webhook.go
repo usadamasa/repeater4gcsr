@@ -2,6 +2,7 @@ package repeater4gcsr
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -16,6 +17,10 @@ import (
 	"github.com/go-git/go-git/v5/storage/memory"
 	"gopkg.in/go-playground/webhooks.v5/bitbucket"
 )
+
+type IndexPayload struct {
+	Ip string `json:"ip"`
+}
 
 const (
 	GCSR_HOSTNAME string = "source.developers.google.com:2022"
@@ -43,9 +48,12 @@ func init() {
 	if cred == nil {
 		sugar.Fatalf("default credentials not found")
 	}
-	projectName = cred.ProjectID
+	if cred.ProjectID == "" {
+		projectName = os.Getenv("GCP_PROJECT")
+	} else {
+		projectName = cred.ProjectID
+	}
 	sugar.Debugf("GCP_PROJECT : %s", projectName)
-
 
 	if gcsrSshUser == "" {
 		sugar.Fatalf("not set env GCSR_SSH_KEY_USER")
@@ -53,7 +61,7 @@ func init() {
 	sugar.Debugf("GCSR_SSH_KEY_USER=%s", gcsrSshUser)
 }
 
-func Webhook(w http.ResponseWriter, r *http.Request) {
+func Index(w http.ResponseWriter, r *http.Request) {
 	ip, err := getMyIp()
 	if err != nil {
 		_, _ = fmt.Fprintf(w, "%v\n", err)
@@ -62,7 +70,16 @@ func Webhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sugar.Debugf("ip:%s", ip)
+	w.Header().Set("Content-Type", "application/json")
+	index := IndexPayload{
+		Ip: string(ip),
+	}
+	body, _ := json.Marshal(index)
+	_, _ = w.Write(body)
+	w.WriteHeader(http.StatusOK)
+}
 
+func Webhook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "405 - Method Not Allowed", http.StatusMethodNotAllowed)
 		return

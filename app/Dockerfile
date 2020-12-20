@@ -7,14 +7,11 @@ ENV CGO_ENABLED 0
 
 ENV GOOS linux
 ENV GOARCH amd64
-RUN go build -o main ./main.go
+RUN go build -o main cmd/main.go
 
 FROM gcr.io/distroless/base
 
 WORKDIR /app
 COPY --from=build-env /app/main /app/main
-
-RUN curl https://sdk.cloud.google.com | bash
-RUN git config credential.'https://source.developers.google.com'.helper gcloud.sh
 
 ENTRYPOINT ["./main"]

@@ -15,6 +15,7 @@ deploy:
 		--platform managed \
 		--project=${GCP_PROJECT} \
 		--region=asia-northeast1 \
+		--set-env-vars GCSR_SSH_KEY_USER=${GCSR_SSH_KEY_USER} \
 
 deploy-functions:
 	gcloud functions deploy repeater4gcsr \
