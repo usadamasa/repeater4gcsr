@@ -6,23 +6,6 @@ steps:
       - '-t'
       - 'gcr.io/$PROJECT_ID/repeater4gcsr'
       - '.'
-  # Push the container image to Container Registry
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-       - 'push'
-       - 'gcr.io/$PROJECT_ID/repeater4gcsr'
-#  # Deploy container image to Cloud Run
-#  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-#    entrypoint: gcloud
-#    args:
-#      - 'run'
-#      - 'deploy'
-#      - 'repeater4gcsr-43'
-#      - '--image'
-#      - 'gcr.io/$PROJECT_ID/repeater4gcsr'
-#      - '--region'
-#      - 'asia-northeast1'
-#      - '--platform'
-#      - 'managed'
+
 images:
   - 'gcr.io/$PROJECT_ID/repeater4gcsr'

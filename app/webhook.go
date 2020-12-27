@@ -11,10 +11,6 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/oauth2/google"
 
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/config"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/storage/memory"
 	"gopkg.in/go-playground/webhooks.v5/bitbucket"
 )
 
@@ -22,18 +18,11 @@ type IndexPayload struct {
 	Ip string `json:"ip"`
 }
 
-const (
-	GCSR_HOSTNAME string = "source.developers.google.com:2022"
-)
-
 var (
 	logger *zap.Logger
 	sugar  *zap.SugaredLogger
 
 	projectName string
-
-	// TODO: gcsrの認証をgcloudでやりたい
-	gcsrSshUser = os.Getenv("GCSR_SSH_KEY_USER")
 )
 
 func init() {
@@ -43,22 +32,20 @@ func init() {
 
 	cred, err := google.FindDefaultCredentials(context.Background())
 	if err != nil {
-		sugar.Fatalf("default credentials not found")
+		sugar.Warnf("default credentials not found err:%s", err)
 	}
 	if cred == nil {
-		sugar.Fatalf("default credentials not found")
+		sugar.Warn("default credentials not found")
 	}
 	if cred.ProjectID == "" {
 		projectName = os.Getenv("GCP_PROJECT")
 	} else {
 		projectName = cred.ProjectID
 	}
-	sugar.Debugf("GCP_PROJECT : %s", projectName)
-
-	if gcsrSshUser == "" {
-		sugar.Fatalf("not set env GCSR_SSH_KEY_USER")
+	if projectName == "" {
+		sugar.Fatalf("ProjectID not found")
 	}
-	sugar.Debugf("GCSR_SSH_KEY_USER=%s", gcsrSshUser)
+	sugar.Debugf("GCP_PROJECT : %s", projectName)
 }
 
 func Index(w http.ResponseWriter, r *http.Request) {
@@ -79,13 +66,38 @@ func Index(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func Driver(w http.ResponseWriter, r *http.Request) {
+	tempDir, err := cloneFromGCSR("repeater4gcsr")
+	if err != nil {
+		sugar.Errorf("cloneFromGCSR error %s", err)
+	}
+	sugar.Debugf("cloneFromGCSR tempDir:%s", tempDir)
+	sshFile, err := storePrivateKeyFile(projectName)
+	if err != nil {
+		return
+	}
+	sugar.Debugf("storePrivateKeyFile %s", sshFile)
+
+	err = fetchBitbucket(tempDir, sshFile, "git@bitbucket.org:/usadamasa/repeater4gcsr.git")
+	if err != nil {
+		sugar.Errorf("fetchBitbucket error %s", err)
+	}
+
+	err = pushAll(tempDir, sshFile)
+	if err != nil {
+		sugar.Errorf("pushAll error %s", err)
+	}
+}
+
 func Webhook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
+		sugar.Info("405 - Method Not Allowed")
 		http.Error(w, "405 - Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	if r.Header.Get("Content-Type") != "application/json" {
+		sugar.Info("400 - Unhandled Content-Type")
 		http.Error(w, "400 - Unhandled Content-Type", http.StatusBadRequest)
 		return
 	}
@@ -94,16 +106,16 @@ func Webhook(w http.ResponseWriter, r *http.Request) {
 	bb, _ := bitbucket.New()
 	payload, err := bb.Parse(r, bitbucket.RepoPushEvent)
 	if err != nil {
+		sugar.Info("400 - Unhandled Json body")
 		_, _ = fmt.Fprintf(w, "bb.Parse %s\n", err)
 		http.Error(w, "400 - Unhandled Json body", http.StatusBadRequest)
 		return
 	}
-
 	pushEvent := payload.(bitbucket.RepoPushPayload)
-	sugar.Debugf("repository name:%v", pushEvent.Repository.Links.HTML.Href)
-	err = cloneAndPush(&pushEvent)
+	sugar.Infof("Receive webhook event from %s", pushEvent.Repository.FullName)
+	err = mirroring(projectName, &pushEvent)
 	if err != nil {
-		_, _ = fmt.Fprintf(w, "cloneFromOrigin %s\n", err)
+		_, _ = fmt.Fprintf(w, "mirroring %s\n", err)
 		http.Error(w, "500 Internal Error", http.StatusInternalServerError)
 		return
 	}
@@ -126,114 +138,4 @@ func getMyIp() ([]byte, error) {
 		return nil, err
 	}
 	return ip, nil
-}
-
-func cloneAndPush(payload *bitbucket.RepoPushPayload) error {
-	for i, change := range payload.Push.Changes {
-		if change.Closed {
-			// deleted branch
-			sugar.Infof("%s %s is deleted", change.Old.Type, change.Old.Name)
-			err := deleteBranch(change.Old.Name)
-			if err != nil {
-				sugar.Errorf("deleteBranch: %s, %s\n", change.Old.Name, err)
-				return err
-			}
-			continue
-		}
-
-		sugar.Debugf("changes[%d] type:%v", i, change.New.Type)
-		sugar.Debugf("changes[%d] name:%v", i, change.New.Name)
-
-		switch change.New.Type {
-		case "branch":
-			repo, err := cloneFromOrigin(payload.Repository.Links.HTML.Href, change.New.Name)
-			if err != nil {
-				sugar.Errorf("git.Clone %s\n", err)
-				return err
-			}
-			sugar.Debugf("clone repo: %s", payload.Repository.Links.HTML.Href)
-			err = push(repo)
-			if err != nil {
-				sugar.Errorf("git.push %s\n", err)
-				return err
-			}
-		default:
-			sugar.Debugf("Nop %s", change.New.Type)
-		}
-	}
-	return nil
-}
-
-func cloneFromOrigin(url string, branch string) (*git.Repository, error) {
-	auth, err := GetBitBcuketAuth(projectName)
-	if err != nil {
-		sugar.Errorf("GetBitBcuketAuth repeater4gcsr-bitbucket-key %s", err)
-		return nil, err
-	}
-
-	sshUrl, _ := transformProtocol(url)
-	sugar.Debugf("start clone repo: %s, git url: %s", url, sshUrl)
-	// https://dev.classmethod.jp/articles/in-memory-git-commit-and-push/
-	repo, err := git.Clone(memory.NewStorage(), nil, &git.CloneOptions{
-		URL:           sshUrl,
-		ReferenceName: plumbing.ReferenceName(fmt.Sprintf("refs/heads/%s", branch)),
-		Auth:          auth,
-	})
-	if err != nil {
-		sugar.Errorf("git.Clone %s\n", err)
-		return nil, err
-	}
-
-	sugar.Debugf("clone repo: %s", url)
-	head, _ := repo.Head()
-	sugar.Debugf("branch name:%s, hash:%s", head.Name(), head.Hash())
-	return repo, nil
-}
-
-func push(repo *git.Repository) error {
-	remote, err := repo.CreateRemote(makeGCSRRemoteConfig())
-	if err != nil {
-		sugar.Errorf("repo.CreateRemote %s", err)
-		return err
-	}
-	sugar.Debugf("add remote %s", remote.Config().Fetch[0])
-
-	auth, err := GetGCSRAuth(projectName, gcsrSshUser)
-	if err != nil {
-		sugar.Errorf("GetGCSRAuth repeater4gcsr-gcsr-key %s", err)
-		return err
-	}
-
-	err = remote.Push(&git.PushOptions{
-		RemoteName: "gcsr",
-		Force:      true,
-		Auth:       auth,
-	})
-	if err != nil {
-		message := fmt.Sprintf("%s", err)
-		if message == "already up-to-date" {
-			sugar.Debugf(message)
-			return nil
-		}
-		sugar.Errorf("remote.push %s", err)
-		return err
-	}
-	return nil
-}
-
-func deleteBranch(branchShortName string) error {
-	auth, err := GetGCSRAuth(projectName, gcsrSshUser)
-	if err != nil {
-		sugar.Errorf("GetGCSRAuth repeater4gcsr-gcsr-key %s", err)
-		return err
-	}
-	gcsr := git.NewRemote(memory.NewStorage(), makeGCSRRemoteConfig())
-	pushConfig := &git.PushOptions{
-		RemoteName: "gcsr",
-		RefSpecs:   []config.RefSpec{config.RefSpec(":refs/heads/" + branchShortName)},
-		Auth:       auth,
-	}
-	err = gcsr.Push(pushConfig)
-
-	return err
 }

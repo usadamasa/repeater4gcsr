@@ -62,20 +62,9 @@ ssh-keygen -f /tmp/${KEY_NAME} -N "" -C"ssh key for bitbucket"
 gcloud secrets create ${KEY_NAME} --replication-policy="automatic"
 gcloud secrets versions add ${KEY_NAME} --data-file /tmp/${KEY_NAME}
 cat /tmp/${KEY_NAME}.pub | pbcopy
-
-# add gcsr key
-KEY_NAME=repeater4gcsr-gcsr-key
-ssh-keygen -f /tmp/${KEY_NAME} -N "" -C"ssh key for gcsr"
-gcloud secrets create ${KEY_NAME} --replication-policy="automatic"
-gcloud secrets versions add ${KEY_NAME} --data-file /tmp/${KEY_NAME}
-cat /tmp/${KEY_NAME}.pub | pbcopy
 ```
 
 * `/tmp/repeater4gcsr-bitbucket-key.pub` はBitbucketのリポジトリに登録 
-* `/tmp/repeater4gcsr-gcsr-key.pub` はSourceRepositoryに登録
-    * 登録でログインしていたGCPユーザ名を控える
-      * GCSRの認証に個人のSSH鍵を使うことになってるのがイマイチ…｡
-      * cloud runで動かせばgcloudの認証を利用できるのか?
 
 ### Create tfstate bucket
 
@@ -90,7 +79,6 @@ cd ${ROOT}/terraform
 cat > terraform.tfvars << __EOF__
 gcp_project   = "${GCP_PROJECT}"
 gcp_location  = "asia-northeast1"
-gcsr_ssh_user = "yourname@example.com"
 __EOF__
 
 terraform init -backend-config="bucket=${GCP_PROJECT}-tfstate"
@@ -98,18 +86,16 @@ terraform plan
 terraform apply
 ```
 
-## Deploy CloudFunction Manually
+## Deploy CloudRun Manually
 
 ```bash
 cd ${ROOT}/app
 export GCP_PROJECT=your-project-name
-export GCSR_SSH_KEY_USER=yourname@example.com 
-make deploy-functions
+make submit
+make deploy
 ```
 
 ## TODO
-- [ ] sync tag add/delete
-- [ ] CloudRun/CloudFunctionsに付与したサービスアカウントの認証情報でGCSRへのpushを実現する
-    * 個人に紐付いたssh鍵を使っていると保守性に難あり
-    * `git config credential.'https://source.developers.google.com'.helper gcloud.sh` をDockerfile内で実行できるか?
-    * https://cloud.google.com/source-repositories/docs/authentication
+- [ ] sync tag delete
+- [ ] sync branch delete
+- [x] CloudRun/CloudFunctionsに付与したサービスアカウントの認証情報でGCSRへのpushを実現する

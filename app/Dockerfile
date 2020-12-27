@@ -9,7 +9,7 @@ ENV GOOS linux
 ENV GOARCH amd64
 RUN go build -o main cmd/main.go
 
-FROM gcr.io/distroless/base
+FROM gcr.io/google.com/cloudsdktool/cloud-sdk:latest
 
 WORKDIR /app
 COPY --from=build-env /app/main /app/main
