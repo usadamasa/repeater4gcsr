@@ -1,21 +1,37 @@
+TEST_PROJECT_NAME:=example_test
+
 .PHONY: \
-	submit \
+	build \
 	deploy \
+	submit \
+	test \
+	up \
 
 build:
 	go build cmd/main.go
 
+test:
+	GCP_PROJECT=$(TEST_PROJECT_NAME) \
+	GCSR_SSH_KEY_USER=user@example.com \
+	go test
+
+up:
+	docker-compose up --build
+
 submit:
-	gcloud builds submit --tag gcr.io/${GCP_PROJECT}/repeater4gcsr
+	gcloud builds submit --config cloudbuild.yaml .
 
 deploy:
 	gcloud beta run deploy \
 		repeater4gcsr \
+		--concurrency=1 \
 		--image gcr.io/${GCP_PROJECT}/repeater4gcsr:latest \
+		--max-instances=1 \
+		--min-instances=0 \
 		--platform managed \
 		--project=${GCP_PROJECT} \
 		--region=asia-northeast1 \
-		--set-env-vars GCSR_SSH_KEY_USER=${GCSR_SSH_KEY_USER} \
+		--timeout=15m \
 
 deploy-functions:
 	gcloud functions deploy repeater4gcsr \

@@ -10,10 +10,9 @@ import (
 )
 
 func main() {
-	log.Print("Hello world sample started.")
-
 	http.HandleFunc("/", repeater4gcsr.Index)
 	http.HandleFunc("/webhook", repeater4gcsr.Webhook)
+	http.HandleFunc("/driver", repeater4gcsr.Driver)
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
