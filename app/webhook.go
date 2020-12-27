@@ -66,29 +66,6 @@ func Index(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func Driver(w http.ResponseWriter, r *http.Request) {
-	tempDir, err := cloneFromGCSR("repeater4gcsr")
-	if err != nil {
-		sugar.Errorf("cloneFromGCSR error %s", err)
-	}
-	sugar.Debugf("cloneFromGCSR tempDir:%s", tempDir)
-	sshFile, err := storePrivateKeyFile(projectName)
-	if err != nil {
-		return
-	}
-	sugar.Debugf("storePrivateKeyFile %s", sshFile)
-
-	err = fetchBitbucket(tempDir, sshFile, "git@bitbucket.org:/usadamasa/repeater4gcsr.git")
-	if err != nil {
-		sugar.Errorf("fetchBitbucket error %s", err)
-	}
-
-	err = pushAll(tempDir, sshFile)
-	if err != nil {
-		sugar.Errorf("pushAll error %s", err)
-	}
-}
-
 func Webhook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		sugar.Info("405 - Method Not Allowed")
