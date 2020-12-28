@@ -58,10 +58,10 @@ echo ${APIS} | while read API ; do gcloud services enable --project=${GCP_PROJEC
 ```bash
 # add Bitbucket key
 KEY_NAME=repeater4gcsr-bitbucket-key
-ssh-keygen -f /tmp/${KEY_NAME} -N "" -C"ssh key for bitbucket"
+ssh-keygen -f /var/tmp/${KEY_NAME} -N "" -C"ssh key for bitbucket"
 gcloud secrets create ${KEY_NAME} --replication-policy="automatic"
-gcloud secrets versions add ${KEY_NAME} --data-file /tmp/${KEY_NAME}
-cat /tmp/${KEY_NAME}.pub | pbcopy
+gcloud secrets versions add ${KEY_NAME} --data-file /var/tmp/${KEY_NAME}
+cat /var/tmp/${KEY_NAME}.pub | pbcopy
 ```
 
 * `/tmp/repeater4gcsr-bitbucket-key.pub` はBitbucketのリポジトリに登録 

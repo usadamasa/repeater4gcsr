@@ -171,7 +171,7 @@ resource "google_vpc_access_connector" "repeater4gcsr_an1" {
 ///////////////////////////////////
 data "google_container_registry_image" "repeater4gcsr" {
   project = data.google_project.project.name
-  region  = var.gcp_location
+//  region  = var.gcp_location
   name    = "repeater4gcsr"
 }
 
@@ -188,12 +188,12 @@ resource "google_cloud_run_service" "repeater4gcsr" {
   template {
     spec {
       containers {
-        image = data.google_container_registry_image.repeater4gcsr.image_url
+        image = data.google_container_registry_image.repeater4gcsr.id
       }
       container_concurrency = 1
       timeout_seconds       = 15 * 60
-      //      service_account_name  = google_service_account.repeater4gcsr.email
-      service_account_name = "${data.google_project.project.number}-compute@developer.gserviceaccount.com"
+      service_account_name  = google_service_account.repeater4gcsr.email
+//      service_account_name = "${data.google_project.project.number}-compute@developer.gserviceaccount.com"
     }
 
     metadata {
@@ -213,9 +213,11 @@ resource "google_cloud_run_service" "repeater4gcsr" {
 }
 
 resource "google_cloud_run_service_iam_member" "cr_invoker" {
+  project  = data.google_project.project.name
   service  = google_cloud_run_service.repeater4gcsr.name
   location = google_cloud_run_service.repeater4gcsr.location
   role     = "roles/run.invoker"
+  // TODO:change "allAuthenticatedUsers"
   member   = "allUsers"
 }
 
