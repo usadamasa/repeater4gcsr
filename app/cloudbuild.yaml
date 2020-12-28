@@ -1,6 +1,6 @@
 steps:
   # Build the container image
-  - name: 'asia.gcr.io/cloud-builders/docker'
+  - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
       - '-t'
