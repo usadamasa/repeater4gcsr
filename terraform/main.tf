@@ -213,6 +213,13 @@ resource "google_cloud_run_service" "repeater4gcsr" {
 }
 
 // https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloud_run_service_iam
+resource "google_cloud_run_service_iam_member" "cr_invoker_all" {
+  service  = google_cloud_run_service.repeater4gcsr.name
+  location = google_cloud_run_service.repeater4gcsr.location
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
 
 //resource "null_resource" "cloud_function_repeater4gcsr" {
 //  provisioner "local-exec" {
