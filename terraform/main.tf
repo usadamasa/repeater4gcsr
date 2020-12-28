@@ -212,34 +212,12 @@ resource "google_cloud_run_service" "repeater4gcsr" {
   }
 }
 
-// https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloud_run_service_iam
-resource "google_cloud_run_service_iam_member" "cr_invoker_all" {
+resource "google_cloud_run_service_iam_member" "cr_invoker" {
   service  = google_cloud_run_service.repeater4gcsr.name
   location = google_cloud_run_service.repeater4gcsr.location
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
-
-
-//resource "null_resource" "cloud_function_repeater4gcsr" {
-//  provisioner "local-exec" {
-//    working_dir = "../app"
-//    command     = "make deploy-functions"
-//    environment = {
-//      GCP_PROJECT       = var.gcp_project
-//      GCSR_SSH_KEY_USER = var.gcsr_ssh_user
-//    }
-//  }
-//
-//  depends_on = [
-//    google_vpc_access_connector.repeater4gcsr_an1,
-//  ]
-//}
-//
-//data "google_cloudfunctions_function" "cloud_function_repeater4gcsr" {
-//  project = data.google_project.project.name
-//  name    = "repeater4gcsr"
-//}
 
 ///////////////////////////////////
 // Ingress Networks
