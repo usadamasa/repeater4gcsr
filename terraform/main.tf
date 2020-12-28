@@ -151,27 +151,63 @@ resource "google_vpc_access_connector" "repeater4gcsr_an1" {
 
 
 ///////////////////////////////////
-// Cloud Functions
+// Cloud Run
 ///////////////////////////////////
-resource "null_resource" "cloud_function_repeater4gcsr" {
-  provisioner "local-exec" {
-    working_dir = "../app"
-    command     = "make deploy-functions"
-    environment = {
-      GCP_PROJECT       = var.gcp_project
-      GCSR_SSH_KEY_USER = var.gcsr_ssh_user
-    }
-  }
-
-  depends_on = [
-    google_vpc_access_connector.repeater4gcsr_an1,
-  ]
-}
-
-data "google_cloudfunctions_function" "cloud_function_repeater4gcsr" {
+data "google_container_registry_image" "repeater4gcsr" {
   project = data.google_project.project.name
+  region  = var.gcp_location
   name    = "repeater4gcsr"
 }
+
+resource "google_cloud_run_service" "repeater4gcsr" {
+  project  = data.google_project.project.name
+  name     = "repeater4gcsr"
+  location = var.gcp_location
+
+  traffic {
+    percent         = 100
+    latest_revision = true
+  }
+
+  template {
+    spec {
+      containers {
+        image = data.google_container_registry_image.repeater4gcsr.image_url
+      }
+      container_concurrency = 1
+      timeout_seconds       = 15 * 60
+      service_account_name  = google_service_account.repeater4gcsr.email
+    }
+
+    metadata {
+      annotations = {
+        "autoscaling.knative.dev/maxScale"        = 1
+        "run.googleapis.com/vpc-access-connector" = google_vpc_access_connector.repeater4gcsr_an1.name
+      }
+    }
+  }
+}
+
+
+//resource "null_resource" "cloud_function_repeater4gcsr" {
+//  provisioner "local-exec" {
+//    working_dir = "../app"
+//    command     = "make deploy-functions"
+//    environment = {
+//      GCP_PROJECT       = var.gcp_project
+//      GCSR_SSH_KEY_USER = var.gcsr_ssh_user
+//    }
+//  }
+//
+//  depends_on = [
+//    google_vpc_access_connector.repeater4gcsr_an1,
+//  ]
+//}
+//
+//data "google_cloudfunctions_function" "cloud_function_repeater4gcsr" {
+//  project = data.google_project.project.name
+//  name    = "repeater4gcsr"
+//}
 
 ///////////////////////////////////
 // Ingress Networks
@@ -228,36 +264,36 @@ resource "google_compute_region_network_endpoint_group" "repeater4gcsr_neg" {
   network_endpoint_type = "SERVERLESS"
   region                = var.gcp_location
 
-  cloud_function {
-    function = data.google_cloudfunctions_function.cloud_function_repeater4gcsr.name
+  cloud_run {
+    service = google_cloud_run_service.repeater4gcsr.name
   }
 }
 
 // https://registry.terraform.io/modules/GoogleCloudPlatform/lb-http/google/latest/submodules/serverless_negs
 module "repeater4gcsr-lb" {
-  source            = "GoogleCloudPlatform/lb-http/google//modules/serverless_negs"
-  version           = "~> 4.4"
+  source  = "GoogleCloudPlatform/lb-http/google//modules/serverless_negs"
+  version = "~> 4.4"
 
-  project           = data.google_project.project.name
-  name              = "repeater4gcsr-lb"
+  project = data.google_project.project.name
+  name    = "repeater4gcsr-lb"
 
-  ssl                             = false
-//  managed_ssl_certificate_domains = ["your-domain.com"]
-  https_redirect                  = false
+  ssl = false
+  //  managed_ssl_certificate_domains = ["your-domain.com"]
+  https_redirect = false
 
   create_address = false
-  address = google_compute_global_address.repeater4gcsr_ingress_address.address
+  address        = google_compute_global_address.repeater4gcsr_ingress_address.address
 
   backends = {
     default = {
-      description                     = null
-      enable_cdn                      = false
-      custom_request_headers          = null
-      security_policy                 = google_compute_security_policy.allow_bitbucket_cloud_public_ips.name
+      description            = null
+      enable_cdn             = false
+      custom_request_headers = null
+      security_policy        = google_compute_security_policy.allow_bitbucket_cloud_public_ips.name
 
 
       log_config = {
-        enable = true
+        enable      = true
         sample_rate = 1.0
       }
 
