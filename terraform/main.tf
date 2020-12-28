@@ -206,8 +206,8 @@ resource "google_vpc_access_connector" "repeater4gcsr_an1" {
 data "google_container_registry_image" "repeater4gcsr" {
   project = data.google_project.project.name
   name    = "repeater4gcsr"
-  region = "asia"
-  tag = "latest"
+  region  = "asia"
+  tag     = "latest"
 }
 
 resource "google_cloud_run_service" "repeater4gcsr" {
@@ -280,7 +280,8 @@ resource "google_compute_security_policy" "allow_bitbucket_cloud_public_ips" {
       versioned_expr = "SRC_IPS_V1"
       config {
         src_ip_ranges = [
-        "*"]
+          "*"
+        ]
       }
     }
     description = "default rule"
