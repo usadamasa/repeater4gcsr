@@ -193,20 +193,26 @@ resource "google_cloud_run_service" "repeater4gcsr" {
       container_concurrency = 1
       timeout_seconds       = 15 * 60
       //      service_account_name  = google_service_account.repeater4gcsr.email
-      service_account_name = "504591414383-compute@developer.gserviceaccount.com"
+      service_account_name = "${data.google_project.project.number}-compute@developer.gserviceaccount.com"
     }
 
     metadata {
       annotations = {
-        "autoscaling.knative.dev/maxScale"        = 1
-        "run.googleapis.com/vpc-access-connector" = google_vpc_access_connector.repeater4gcsr_an1.name
+        "autoscaling.knative.dev/maxScale" = 1
+        "run.googleapis.com/launch-stage" : "BETA"
+        //        "run.googleapis.com/vpc-access-egress" : "all"
+        //        "run.googleapis.com/vpc-access-connector" = google_vpc_access_connector.repeater4gcsr_an1.name
       }
     }
   }
-
   autogenerate_revision_name = true
+
+  timeouts {
+    update = "3m"
+  }
 }
 
+// https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloud_run_service_iam
 
 //resource "null_resource" "cloud_function_repeater4gcsr" {
 //  provisioner "local-exec" {
