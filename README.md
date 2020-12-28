@@ -66,13 +66,21 @@ cat /tmp/${KEY_NAME}.pub | pbcopy
 
 * `/tmp/repeater4gcsr-bitbucket-key.pub` はBitbucketのリポジトリに登録 
 
+## Build Images used by CloudRun
+
+```bash
+cd ${ROOT}/app
+export GCP_PROJECT=your-project-name
+make submit
+```
+
 ### Create tfstate bucket
 
 ```bash
 gsutil mb -p ${GCP_PROJECT} -l ASIA -b on gs://${GCP_PROJECT}-tfstate
 ```
 
-### apply
+### Apply
 
 ```bash
 cd ${ROOT}/terraform
@@ -84,15 +92,6 @@ __EOF__
 terraform init -backend-config="bucket=${GCP_PROJECT}-tfstate"
 terraform plan
 terraform apply
-```
-
-## Deploy CloudRun Manually
-
-```bash
-cd ${ROOT}/app
-export GCP_PROJECT=your-project-name
-make submit
-make deploy
 ```
 
 ## TODO

@@ -58,6 +58,22 @@ resource "google_project_iam_binding" "run_service_agent" {
   ]
 }
 
+resource "google_container_registry" "registry" {
+  project  = data.google_project.project.name
+  location = var.gcp_location
+}
+
+resource "google_storage_bucket_iam_binding" "registry_viewer" {
+  //  project = data.google_project.project.name
+  role   = "roles/run.serviceAgent"
+  bucket = google_container_registry.registry.bucket_self_link
+
+  members = [
+    "serviceAccount:${data.google_project.project.number}@cloudbuild.gserviceaccount.com",
+    "serviceAccount:${google_service_account.repeater4gcsr.email}",
+  ]
+}
+
 resource "google_project_iam_binding" "iam_service_account_user" {
   project = data.google_project.project.name
   role    = "roles/iam.serviceAccountUser"
@@ -176,7 +192,8 @@ resource "google_cloud_run_service" "repeater4gcsr" {
       }
       container_concurrency = 1
       timeout_seconds       = 15 * 60
-      service_account_name  = google_service_account.repeater4gcsr.email
+      //      service_account_name  = google_service_account.repeater4gcsr.email
+      service_account_name = "504591414383-compute@developer.gserviceaccount.com"
     }
 
     metadata {
@@ -186,6 +203,8 @@ resource "google_cloud_run_service" "repeater4gcsr" {
       }
     }
   }
+
+  autogenerate_revision_name = true
 }
 
 
