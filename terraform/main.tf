@@ -131,10 +131,6 @@ resource "google_compute_router" "repeater4gcsr_router_an1" {
   name    = "repeater4gcsr-router-an1"
   region  = google_compute_subnetwork.repeater4gcsr_subnet_an1.region
   network = google_compute_network.repeater4gcsr.id
-
-  bgp {
-    asn = 64514
-  }
 }
 
 resource "google_compute_address" "repeater4gcsr_nat_address" {
@@ -193,12 +189,11 @@ resource "google_cloud_run_service" "repeater4gcsr" {
       container_concurrency = 1
       timeout_seconds       = 15 * 60
       service_account_name  = google_service_account.repeater4gcsr.email
-//      service_account_name = "${data.google_project.project.number}-compute@developer.gserviceaccount.com"
     }
 
     metadata {
       annotations = {
-        "autoscaling.knative.dev/maxScale" = 1
+        "autoscaling.knative.dev/maxScale" = 2
         "run.googleapis.com/launch-stage" : "BETA"
         //        "run.googleapis.com/vpc-access-egress" : "all"
         //        "run.googleapis.com/vpc-access-connector" = google_vpc_access_connector.repeater4gcsr_an1.name
