@@ -60,11 +60,10 @@ resource "google_project_iam_binding" "run_service_agent" {
 
 resource "google_container_registry" "registry" {
   project  = data.google_project.project.name
-  location = var.gcp_location
+  location = "ASIA"
 }
 
 resource "google_storage_bucket_iam_binding" "registry_viewer" {
-  //  project = data.google_project.project.name
   role   = "roles/run.serviceAgent"
   bucket = google_container_registry.registry.bucket_self_link
 
@@ -126,16 +125,41 @@ resource "google_compute_firewall" "allow_all_egress" {
   }
 }
 
+// https://cloud.google.com/vpc/docs/firewalls#more_rules_default_vpc
+resource "google_compute_firewall" "allow_gcp_internal_ingress" {
+  project   = data.google_project.project.name
+  name      = "allow-internal-gcp-ingress"
+  network   = google_compute_network.repeater4gcsr.name
+  direction = "INGRESS"
+  source_ranges = [
+    "10.128.0.0/9"
+  ]
+
+  allow {
+    protocol = "tcp"
+    ports    = ["0-65535"]
+  }
+  allow {
+    protocol = "udp"
+    ports    = ["0-65535"]
+  }
+  allow {
+    protocol = "icmp"
+  }
+}
+
 resource "google_compute_router" "repeater4gcsr_router_an1" {
   project = data.google_project.project.name
   name    = "repeater4gcsr-router-an1"
   region  = google_compute_subnetwork.repeater4gcsr_subnet_an1.region
   network = google_compute_network.repeater4gcsr.id
+  //  network = "default"
 }
 
 resource "google_compute_address" "repeater4gcsr_nat_address" {
   project = data.google_project.project.name
   name    = "repeater4gcsr-nat-address"
+  region  = google_compute_router.repeater4gcsr_router_an1.region
 }
 
 resource "google_compute_router_nat" "repeater4gcsr_nat_an1" {
@@ -149,7 +173,7 @@ resource "google_compute_router_nat" "repeater4gcsr_nat_an1" {
 
   log_config {
     enable = true
-    filter = "ERRORS_ONLY"
+    filter = "ALL"
   }
 }
 
@@ -159,16 +183,16 @@ resource "google_vpc_access_connector" "repeater4gcsr_an1" {
   region        = google_compute_subnetwork.repeater4gcsr_subnet_an1.region
   ip_cidr_range = "10.8.0.0/28"
   network       = google_compute_network.repeater4gcsr.name
+  //  network = "default"
 }
-
 
 ///////////////////////////////////
 // Cloud Run
 ///////////////////////////////////
 data "google_container_registry_image" "repeater4gcsr" {
   project = data.google_project.project.name
-//  region  = var.gcp_location
   name    = "repeater4gcsr"
+  region = "asia"
 }
 
 resource "google_cloud_run_service" "repeater4gcsr" {
@@ -184,7 +208,7 @@ resource "google_cloud_run_service" "repeater4gcsr" {
   template {
     spec {
       containers {
-        image = data.google_container_registry_image.repeater4gcsr.id
+        image = data.google_container_registry_image.repeater4gcsr.image_url
       }
       container_concurrency = 1
       timeout_seconds       = 15 * 60
@@ -193,10 +217,11 @@ resource "google_cloud_run_service" "repeater4gcsr" {
 
     metadata {
       annotations = {
-        "autoscaling.knative.dev/maxScale" = 2
-        "run.googleapis.com/launch-stage" : "BETA"
-        //        "run.googleapis.com/vpc-access-egress" : "all"
-        //        "run.googleapis.com/vpc-access-connector" = google_vpc_access_connector.repeater4gcsr_an1.name
+        "autoscaling.knative.dev/maxScale"        = 1
+        "run.googleapis.com/client-name"          = "cloud-console"
+        "run.googleapis.com/launch-stage"         = "BETA"
+        "run.googleapis.com/vpc-access-egress"    = "all"
+        "run.googleapis.com/vpc-access-connector" = google_vpc_access_connector.repeater4gcsr_an1.name
       }
     }
   }
@@ -213,108 +238,108 @@ resource "google_cloud_run_service_iam_member" "cr_invoker" {
   location = google_cloud_run_service.repeater4gcsr.location
   role     = "roles/run.invoker"
   // TODO:change "allAuthenticatedUsers"
-  member   = "allUsers"
+  member = "allUsers"
 }
 
 ///////////////////////////////////
 // Ingress Networks
 ///////////////////////////////////
 
-resource "google_compute_global_address" "repeater4gcsr_ingress_address" {
-  project = data.google_project.project.name
-  name    = "repeater4gcsr-lb-address"
-}
-
-// create Cloud Armor
-resource "google_compute_security_policy" "allow_bitbucket_cloud_public_ips" {
-  project = data.google_project.project.name
-  name    = "allow-bitbucket-cloud-public-ips"
-
-  rule {
-    action   = "deny(403)"
-    priority = "2147483647"
-    match {
-      versioned_expr = "SRC_IPS_V1"
-      config {
-        src_ip_ranges = [
-        "*"]
-      }
-    }
-    description = "default rule"
-  }
-
-  rule {
-    action   = "allow"
-    priority = "10000"
-    match {
-      versioned_expr = "SRC_IPS_V1"
-      config {
-        // https://support.atlassian.com/bitbucket-cloud/docs/what-are-the-bitbucket-cloud-ip-addresses-i-should-use-to-configure-my-corporate-firewall/
-        src_ip_ranges = [
-          "104.192.136.0/21",
-          "185.166.140.0/22",
-          "18.205.93.0/25",
-          "18.234.32.128/25",
-          "13.52.5.0/25",
-        ]
-      }
-    }
-    description = "bitbucket cloud public ips"
-  }
-}
-
-// Serverless NEG
-resource "google_compute_region_network_endpoint_group" "repeater4gcsr_neg" {
-  project               = data.google_project.project.name
-  provider              = google-beta
-  name                  = "repeater4gcsr-neg"
-  network_endpoint_type = "SERVERLESS"
-  region                = var.gcp_location
-
-  cloud_run {
-    service = google_cloud_run_service.repeater4gcsr.name
-  }
-}
-
-// https://registry.terraform.io/modules/GoogleCloudPlatform/lb-http/google/latest/submodules/serverless_negs
-module "repeater4gcsr-lb" {
-  source  = "GoogleCloudPlatform/lb-http/google//modules/serverless_negs"
-  version = "~> 4.4"
-
-  project = data.google_project.project.name
-  name    = "repeater4gcsr-lb"
-
-  ssl = false
-  //  managed_ssl_certificate_domains = ["your-domain.com"]
-  https_redirect = false
-
-  create_address = false
-  address        = google_compute_global_address.repeater4gcsr_ingress_address.address
-
-  backends = {
-    default = {
-      description            = null
-      enable_cdn             = false
-      custom_request_headers = null
-      security_policy        = google_compute_security_policy.allow_bitbucket_cloud_public_ips.name
-
-
-      log_config = {
-        enable      = true
-        sample_rate = 1.0
-      }
-
-      groups = [
-        {
-          group = google_compute_region_network_endpoint_group.repeater4gcsr_neg.id
-        }
-      ]
-
-      iap_config = {
-        enable               = false
-        oauth2_client_id     = null
-        oauth2_client_secret = null
-      }
-    }
-  }
-}
+//resource "google_compute_global_address" "repeater4gcsr_ingress_address" {
+//  project = data.google_project.project.name
+//  name    = "repeater4gcsr-lb-address"
+//}
+//
+//// create Cloud Armor
+//resource "google_compute_security_policy" "allow_bitbucket_cloud_public_ips" {
+//  project = data.google_project.project.name
+//  name    = "allow-bitbucket-cloud-public-ips"
+//
+//  rule {
+//    action   = "deny(403)"
+//    priority = "2147483647"
+//    match {
+//      versioned_expr = "SRC_IPS_V1"
+//      config {
+//        src_ip_ranges = [
+//        "*"]
+//      }
+//    }
+//    description = "default rule"
+//  }
+//
+//  rule {
+//    action   = "allow"
+//    priority = "10000"
+//    match {
+//      versioned_expr = "SRC_IPS_V1"
+//      config {
+//        // https://support.atlassian.com/bitbucket-cloud/docs/what-are-the-bitbucket-cloud-ip-addresses-i-should-use-to-configure-my-corporate-firewall/
+//        src_ip_ranges = [
+//          "104.192.136.0/21",
+//          "185.166.140.0/22",
+//          "18.205.93.0/25",
+//          "18.234.32.128/25",
+//          "13.52.5.0/25",
+//        ]
+//      }
+//    }
+//    description = "bitbucket cloud public ips"
+//  }
+//}
+//
+//// Serverless NEG
+//resource "google_compute_region_network_endpoint_group" "repeater4gcsr_neg" {
+//  project               = data.google_project.project.name
+//  provider              = google-beta
+//  name                  = "repeater4gcsr-neg"
+//  network_endpoint_type = "SERVERLESS"
+//  region                = var.gcp_location
+//
+//  cloud_run {
+//    service = google_cloud_run_service.repeater4gcsr.name
+//  }
+//}
+//
+//// https://registry.terraform.io/modules/GoogleCloudPlatform/lb-http/google/latest/submodules/serverless_negs
+//module "repeater4gcsr-lb" {
+//  source  = "GoogleCloudPlatform/lb-http/google//modules/serverless_negs"
+//  version = "~> 4.4"
+//
+//  project = data.google_project.project.name
+//  name    = "repeater4gcsr-lb"
+//
+//  ssl = false
+//  //  managed_ssl_certificate_domains = ["your-domain.com"]
+//  https_redirect = false
+//
+//  create_address = false
+//  address        = google_compute_global_address.repeater4gcsr_ingress_address.address
+//
+//  backends = {
+//    default = {
+//      description            = null
+//      enable_cdn             = false
+//      custom_request_headers = null
+//      security_policy        = google_compute_security_policy.allow_bitbucket_cloud_public_ips.name
+//
+//
+//      log_config = {
+//        enable      = true
+//        sample_rate = 1.0
+//      }
+//
+//      groups = [
+//        {
+//          group = google_compute_region_network_endpoint_group.repeater4gcsr_neg.id
+//        }
+//      ]
+//
+//      iap_config = {
+//        enable               = false
+//        oauth2_client_id     = null
+//        oauth2_client_secret = null
+//      }
+//    }
+//  }
+//}

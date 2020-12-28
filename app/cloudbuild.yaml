@@ -1,11 +1,11 @@
 steps:
   # Build the container image
-  - name: 'gcr.io/cloud-builders/docker'
+  - name: 'asia.gcr.io/cloud-builders/docker'
     args:
       - 'build'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/repeater4gcsr'
+      - 'asia.gcr.io/$PROJECT_ID/repeater4gcsr'
       - '.'
 
 images:
-  - 'gcr.io/$PROJECT_ID/repeater4gcsr'
+  - 'asia.gcr.io/$PROJECT_ID/repeater4gcsr'
