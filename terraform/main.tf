@@ -94,22 +94,23 @@ resource "google_project_iam_binding" "secrets_accesser" {
 }
 
 ///////////////////////////////////
-// Egress Networks
+// Networks
 ///////////////////////////////////
-
 resource "google_compute_network" "repeater4gcsr" {
   project                         = data.google_project.project.name
-  name                            = "repeater4gcsr"
+  name                            = "repeater4gcsr1"
   delete_default_routes_on_create = false
-  auto_create_subnetworks         = false
+  auto_create_subnetworks         = true
 }
 
-resource "google_compute_subnetwork" "repeater4gcsr_subnet_an1" {
-  project       = data.google_project.project.name
-  name          = "repeater4gcsr-subnet-an1"
-  network       = google_compute_network.repeater4gcsr.id
-  ip_cidr_range = "10.1.0.0/16"
-}
+//resource "google_compute_subnetwork" "repeater4gcsr_subnet_an1" {
+//  project       = data.google_project.project.name
+//  name          = "repeater4gcsr-subnet-an1"
+//  network       = google_compute_network.repeater4gcsr.id
+//  ip_cidr_range = "10.146.0.0/20"
+//  private_ip_google_access = true
+//  private_ipv6_google_access = true
+//}
 
 resource "google_compute_firewall" "allow_all_egress" {
   project   = data.google_project.project.name
@@ -148,12 +149,28 @@ resource "google_compute_firewall" "allow_gcp_internal_ingress" {
   }
 }
 
+resource "google_compute_firewall" "allow_all_icmp" {
+  project   = data.google_project.project.name
+  name      = "allow-all-icmp"
+  network   = google_compute_network.repeater4gcsr.name
+  direction = "INGRESS"
+  source_ranges = [
+    "0.0.0.0/0"
+  ]
+
+  allow {
+    protocol = "icmp"
+  }
+}
+
+///////////////////////////////////
+// Egress Networks
+///////////////////////////////////
 resource "google_compute_router" "repeater4gcsr_router_an1" {
   project = data.google_project.project.name
   name    = "repeater4gcsr-router-an1"
-  region  = google_compute_subnetwork.repeater4gcsr_subnet_an1.region
+  region  = var.gcp_location
   network = google_compute_network.repeater4gcsr.id
-  //  network = "default"
 }
 
 resource "google_compute_address" "repeater4gcsr_nat_address" {
@@ -180,10 +197,9 @@ resource "google_compute_router_nat" "repeater4gcsr_nat_an1" {
 resource "google_vpc_access_connector" "repeater4gcsr_an1" {
   project       = data.google_project.project.name
   name          = "repeater4gcsr-an1"
-  region        = google_compute_subnetwork.repeater4gcsr_subnet_an1.region
+  region        = var.gcp_location
   ip_cidr_range = "10.8.0.0/28"
   network       = google_compute_network.repeater4gcsr.name
-  //  network = "default"
 }
 
 ///////////////////////////////////
@@ -193,11 +209,12 @@ data "google_container_registry_image" "repeater4gcsr" {
   project = data.google_project.project.name
   name    = "repeater4gcsr"
   region = "asia"
+  tag = "latest"
 }
 
 resource "google_cloud_run_service" "repeater4gcsr" {
   project  = data.google_project.project.name
-  name     = "repeater4gcsr"
+  name     = "repeater4gcsr2"
   location = var.gcp_location
 
   traffic {
@@ -218,7 +235,6 @@ resource "google_cloud_run_service" "repeater4gcsr" {
     metadata {
       annotations = {
         "autoscaling.knative.dev/maxScale"        = 1
-        "run.googleapis.com/client-name"          = "cloud-console"
         "run.googleapis.com/launch-stage"         = "BETA"
         "run.googleapis.com/vpc-access-egress"    = "all"
         "run.googleapis.com/vpc-access-connector" = google_vpc_access_connector.repeater4gcsr_an1.name
@@ -230,6 +246,10 @@ resource "google_cloud_run_service" "repeater4gcsr" {
   timeouts {
     update = "3m"
   }
+
+  depends_on = [
+    google_vpc_access_connector.repeater4gcsr_an1,
+  ]
 }
 
 resource "google_cloud_run_service_iam_member" "cr_invoker" {
