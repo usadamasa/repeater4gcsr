@@ -99,3 +99,6 @@ make deploy
 - [ ] sync tag delete
 - [ ] sync branch delete
 - [x] CloudRun/CloudFunctionsに付与したサービスアカウントの認証情報でGCSRへのpushを実現する
+
+## License
+MIT.
